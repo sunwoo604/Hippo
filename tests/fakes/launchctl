@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Test stand-in: records argv as one JSON line in $FAKE_<NAME>_LOG; never touches the real system."""
+import json, os, sys
+name = os.path.basename(sys.argv[0]).upper()
+log = os.environ.get(f"FAKE_{name}_LOG")
+if log:
+    with open(log, "a") as f:
+        f.write(json.dumps(sys.argv[1:]) + "\n")
+sys.exit(int(os.environ.get(f"FAKE_{name}_EXIT", "0")))

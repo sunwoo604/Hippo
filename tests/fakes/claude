@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Stand-in for the real `claude` CLI so tests never call the model.
+
+Behavior is driven by env vars:
+  FAKE_CLAUDE_LOG        append one JSON line per call: {"argv", "cwd", "stdin", "settings"}
+  FAKE_CLAUDE_LOGGED_IN  "0" makes `claude auth status` report logged out
+  FAKE_CLAUDE_LOGIN_FILE `claude auth login` creates it; status then reports logged in
+  FAKE_CLAUDE_LOGIN_EXIT exit code for `claude auth login` (non-zero: login fails)
+  FAKE_CLAUDE_EXIT       exit code for `-p` runs (default 0)
+  FAKE_CLAUDE_SUBTYPE    result subtype for `-p` runs, e.g. error_max_turns
+  FAKE_CLAUDE_ACTIONS    JSON file of actions a `-p` run performs, simulating an agent:
+                         [{"bash": "<command>"}, {"write": "<path>", "content": "..."}]
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+argv = sys.argv[1:]
+printing = "-p" in argv or "--print" in argv
+stdin = sys.stdin.read() if printing and not sys.stdin.isatty() else ""
+
+settings = None
+if "--settings" in argv:
+    with open(argv[argv.index("--settings") + 1]) as f:
+        settings = json.load(f)
+
+log = os.environ.get("FAKE_CLAUDE_LOG")
+if log:
+    with open(log, "a") as f:
+        f.write(json.dumps({"argv": argv, "cwd": os.getcwd(), "stdin": stdin,
+                            "settings": settings,
+                            "hippo_agent": os.environ.get("HIPPO_AGENT")}) + "\n")
+
+login_file = os.environ.get("FAKE_CLAUDE_LOGIN_FILE")
+
+if argv[:2] == ["auth", "login"]:
+    code = int(os.environ.get("FAKE_CLAUDE_LOGIN_EXIT", "0"))
+    if code == 0 and login_file:
+        open(login_file, "w").close()
+    sys.exit(code)
+
+if argv[:2] == ["auth", "status"]:
+    logged_in = os.environ.get("FAKE_CLAUDE_LOGGED_IN", "1") == "1" or (
+        bool(login_file) and os.path.exists(login_file)
+    )
+    print(json.dumps({"loggedIn": logged_in}))
+    sys.exit(0 if logged_in else 1)
+
+
+def emit(event):
+    print(json.dumps(event), flush=True)
+
+
+if printing:
+    code = int(os.environ.get("FAKE_CLAUDE_EXIT", "0"))
+    streaming = "stream-json" in argv
+    actions_file = os.environ.get("FAKE_CLAUDE_ACTIONS")
+    actions = json.load(open(actions_file)) if actions_file else []
+    if streaming:
+        emit({"type": "system", "subtype": "init"})
+    for a in actions:
+        if "bash" in a:
+            tool = {"name": "Bash", "input": {"command": a["bash"]}}
+            subprocess.run(a["bash"], shell=True, cwd=os.getcwd())
+        else:
+            tool = {"name": "Write", "input": {"file_path": a["write"]}}
+            os.makedirs(os.path.dirname(os.path.abspath(a["write"])), exist_ok=True)
+            with open(a["write"], "w") as f:
+                f.write(a.get("content", ""))
+        if streaming:
+            emit({"type": "assistant",
+                  "message": {"content": [{"type": "tool_use", **tool}]}})
+    subtype = os.environ.get("FAKE_CLAUDE_SUBTYPE") or ("success" if code == 0 else "error")
+    emit({"type": "result", "subtype": subtype,
+          "is_error": code != 0 or subtype != "success", "result": "" if subtype != "success" else "fake",
+          "num_turns": len(actions) + 1, "total_cost_usd": 0.01})
+    sys.exit(code)
+
+sys.exit(0)

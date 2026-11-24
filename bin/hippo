@@ -1,0 +1,17 @@
+#!/bin/sh
+# Plugin entry point: runs the Hippo engine bundled in this plugin (src/hippo)
+# with the first Python 3.12+ on PATH. Claude Code puts this bin/ on the Bash
+# tool's PATH while the plugin is enabled.
+root="$(cd "$(dirname "$0")/.." && pwd)"
+for py in python3.14 python3.13 python3.12 python3; do
+  if command -v "$py" >/dev/null 2>&1 &&
+     "$py" -c 'import sys; sys.exit(sys.version_info < (3, 12))' 2>/dev/null; then
+    HIPPO_ROUTE=plugin PYTHONPATH="$root/src${PYTHONPATH:+:$PYTHONPATH}" exec "$py" -m hippo "$@"
+  fi
+done
+echo "hippo: needs Python 3.12 or newer, and none was found on PATH." >&2
+echo "" >&2
+echo "── Next steps for you ──" >&2
+echo "1. Install Python 3.12+ (https://www.python.org/downloads/ or: brew install python@3.12)." >&2
+echo "2. Then run \`hippo install\` again." >&2
+exit 1

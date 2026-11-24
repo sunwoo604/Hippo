@@ -1,0 +1,8 @@
+{
+  "name": "hippo",
+  "displayName": "Hippo",
+  "version": "0.1.0",
+  "description": "Persistent, structured project memory for coding agents: feature docs, decisions, and session patch notes consolidated daily.",
+  "author": { "name": "Sunwoo Kim" },
+  "keywords": ["memory", "documentation", "context"]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "hippo",
+  "owner": { "name": "Sunwoo Kim" },
+  "description": "Hippo: persistent project memory for Claude Code.",
+  "plugins": [
+    {
+      "name": "hippo",
+      "source": ".",
+      "description": "Persistent, structured project memory for coding agents."
+    }
+  ]
+}
